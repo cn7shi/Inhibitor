@@ -2,16 +2,21 @@
 
 mod entity;
 mod component;
+mod config;
+mod constant;
 
 
 use component::register::Registry;
 use component::entrygate::EntryGate;
 use component::exitgate::ExitGate;
 use component::circuitbreaker::CircuitBreaker;
+use component::groq_test::GroqTest;
+use constant::DEFAULT_MAX_RETRIES;
 
 
 
-fn main() {
+#[tokio::main]
+async fn main() {
     println!("=== 极简网关测试 ===");
     
     //任务开始  测试加mut
@@ -26,22 +31,34 @@ fn main() {
     */
    
     // 用熔断器包裹：失败自动重试3次
-    if let Err(e) = CircuitBreaker::retry(3, || {
+    if let Err(e) = CircuitBreaker::retry(DEFAULT_MAX_RETRIES, || {
         ExitGate::check_out(&my_permit)
     }) {
         println!("{}", e);
         return; // 重试3次都失败，才真正放弃
     }
 
-    // 3. 核心执行 (Execute)：工具在外面辛勤工作...
-    println!("[外部执行] 离开agent，正在调用外部工具 (同步模拟)...");
+    // 3. 核心执行 (Execute)：调用 Groq API
+    println!("[外部执行] 离开agent，正在调用 Groq API...");
+    match GroqTest::call("你好，请用一句话介绍你自己。").await {
+        Ok(reply) => {
+            println!("[外部执行] ✅ API 返回结果:");
+            println!("{}", reply);
+        }
+        Err(e) => {
+            println!("[外部执行] {}", e);
+            return;
+        }
+    }
     
 
     // 4. 进门安检 (Entry)：工具带着结果回来了，准备进入agent
     // （查验带回来的 permit_id 是否合法）
     // my_permit.permit_id = 10087;
-
-    if let Err(e) = EntryGate::check_in(&my_permit) {
+    
+    if let Err(e) = CircuitBreaker::retry(DEFAULT_MAX_RETRIES, || {
+        EntryGate::check_in(&my_permit)
+    }) {
         println!("{}", e);
         /*
            待补充决策     
