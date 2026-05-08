@@ -13,9 +13,10 @@ impl ExitGate {
             Ok(())
         } else {
             Err(format!(
-                "🔴 [出门守卫] 熔断：出参异常 (ID: {}, Status: {})", 
+                "🔴 [出门守卫] 熔断：出参异常 (ID: {}, Status: {})",
                 permit.permit_id, permit.permit_status
             ))
         }
+        //
     }
 }

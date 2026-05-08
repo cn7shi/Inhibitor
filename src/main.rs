@@ -7,6 +7,7 @@ mod component;
 use component::register::Registry;
 use component::entrygate::EntryGate;
 use component::exitgate::ExitGate;
+use component::circuitbreaker::CircuitBreaker;
 
 
 
@@ -24,12 +25,12 @@ fn main() {
         2.出门安检 (Exit)：准备离开agemt，去调用外部工具 （拿着刚初始化的 permit，检查状态是否干净）
     */
    
-    if let Err(e) = ExitGate::check_out(&my_permit) {
+    // 用熔断器包裹：失败自动重试3次
+    if let Err(e) = CircuitBreaker::retry(3, || {
+        ExitGate::check_out(&my_permit)
+    }) {
         println!("{}", e);
-        /*
-           待补充决策     
-        */
-        return; // 状态不对，不准出门！
+        return; // 重试3次都失败，才真正放弃
     }
 
     // 3. 核心执行 (Execute)：工具在外面辛勤工作...
