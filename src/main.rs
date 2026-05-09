@@ -4,12 +4,14 @@ mod entity;
 mod component;
 mod config;
 mod constant;
+mod gate;
+mod strategies;
 
 
 use component::register::Registry;
-use component::entrygate::EntryGate;
-use component::exitgate::ExitGate;
-use component::circuitbreaker::CircuitBreaker;
+use gate::entrygate::EntryGate;
+use gate::exitgate::ExitGate;
+use strategies::circuit_breaker::CircuitBreaker;
 use component::groq_test::GroqTest;
 use constant::DEFAULT_MAX_RETRIES;
 
