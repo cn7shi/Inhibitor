@@ -6,6 +6,8 @@ mod config;
 mod constant;
 mod gate;
 mod strategies;
+mod validator;
+mod errors;
 
 
 use component::register::Registry;
@@ -14,6 +16,7 @@ use gate::exitgate::ExitGate;
 use strategies::circuit_breaker::CircuitBreaker;
 use component::groq_test::GroqTest;
 use constant::DEFAULT_MAX_RETRIES;
+use errors::ValidationError;
 
 
 
@@ -36,7 +39,11 @@ async fn main() {
     if let Err(e) = CircuitBreaker::retry(DEFAULT_MAX_RETRIES, || {
         ExitGate::check_out(&my_permit)
     }) {
-        println!("{}", e);
+        match &e {
+            ValidationError::InvalidPermit(id) => println!("🔴 [出门守卫] 凭证异常 (ID: {})", id),
+            ValidationError::InvalidJson(err) => println!("🔴 [出门守卫] JSON 异常: {}", err),
+            ValidationError::InvalidStatus(s) => println!("🔴 [出门守卫] 状态异常 (Status: {})", s),
+        }
         return; // 重试3次都失败，才真正放弃
     }
 
@@ -61,9 +68,13 @@ async fn main() {
     if let Err(e) = CircuitBreaker::retry(DEFAULT_MAX_RETRIES, || {
         EntryGate::check_in(&my_permit)
     }) {
-        println!("{}", e);
+        match &e {
+            ValidationError::InvalidPermit(id) => println!("🔴 [进门守卫] 凭证异常 (ID: {})", id),
+            ValidationError::InvalidJson(err) => println!("🔴 [进门守卫] JSON 异常: {}", err),
+            ValidationError::InvalidStatus(s) => println!("🔴 [进门守卫] 状态异常 (Status: {})", s),
+        }
         /*
-           待补充决策     
+           待补充决策：未来按错误类型触发不同策略
         */
         return; // 查验不合格，拦截在门外！
     }
