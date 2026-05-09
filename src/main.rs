@@ -68,6 +68,18 @@ async fn main() {
 
     println!("[主流程] 恭喜！工具执行完毕，数据安全回到agent，进入下一轮思考。");
 
+    // ===== 工具调用测试 =====
+    println!("\n=== 工具调用测试 ===");
+    match GroqTest::call_with_tools("What's the weather in San Francisco?").await {
+        Ok(reply) => {
+            println!("[工具调用] ✅ 最终回复:");
+            println!("{}", reply);
+        }
+        Err(e) => {
+            println!("[工具调用] ❌ {}", e);
+        }
+    }
+
 
 
     

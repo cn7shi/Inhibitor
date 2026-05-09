@@ -9,4 +9,5 @@
 pub struct Permit{
     pub permit_id:u64,   //任务id
     pub permit_status:u8,//任务状态
+    pub payload: String, // 用于传输 JSON 数据
 }
