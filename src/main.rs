@@ -17,7 +17,7 @@ use strategies::circuit_breaker::CircuitBreaker;
 use component::groq_test::GroqTest;
 use constant::DEFAULT_MAX_RETRIES;
 use errors::ValidationError;
-use tracing::{info, error};
+use tracing::{info, warn, error};
 
 
 
@@ -31,25 +31,32 @@ async fn main() {
     info!("=== 极简网关测试 ===");
     
     //任务开始  测试加mut
-    let  my_permit = Registry::enroll_task();
+    let mut my_permit = Registry::enroll_task();
     
     // 打印Permit
-    info!(permit_id = my_permit.permit_id, status = my_permit.permit_status, "拿到凭证");
+    info!(permit_id = my_permit.permit_id, status = %my_permit.permit_status, "拿到凭证");
 
     /* 
         2.出门安检 (Exit)：准备离开agemt，去调用外部工具 （拿着刚初始化的 permit，检查状态是否干净）
     */
    
     // 用熔断器包裹：失败自动重试3次
-    if let Err(e) = CircuitBreaker::retry(DEFAULT_MAX_RETRIES, || {
-        ExitGate::check_out(&my_permit)
-    }) {
-        match &e {
-            ValidationError::InvalidPermit(id) => error!(gate = "exit", permit_id = id, "凭证异常"),
-            ValidationError::InvalidJson(err) => error!(gate = "exit", detail = err.as_str(), "JSON 异常"),
-            ValidationError::InvalidStatus(s) => error!(gate = "exit", status = s, "状态异常"),
-        }
-        return; // 重试3次都失败，才真正放弃
+    if let Err(_e) = CircuitBreaker::retry(
+        DEFAULT_MAX_RETRIES,
+        || ExitGate::check_out(&mut my_permit),
+        |err, attempt| {
+            // 每次失败的回调 —— 未来 planner 在这里根据错误类型调整重试参数
+            match err {
+                ValidationError::InvalidPermit(id) => warn!(gate = "exit", attempt = attempt, permit_id = id, "凭证异常"),
+                ValidationError::InvalidJson(detail) => warn!(gate = "exit", attempt = attempt, detail = detail.as_str(), "JSON 异常"),
+                ValidationError::InvalidStatus(s) => warn!(gate = "exit", attempt = attempt, status = %s, "状态异常"),
+            }
+        },
+    ) {
+        my_permit.permit_status = my_permit.permit_status.block()
+            .expect("状态转换失败：无法切换到 Blocked");
+        error!(status = %my_permit.permit_status, "出门校验最终失败，任务已挂起");
+        return;
     }
 
     // 3. 核心执行 (Execute)：调用 Groq API
@@ -70,18 +77,22 @@ async fn main() {
     // （查验带回来的 permit_id 是否合法）
     // my_permit.permit_id = 10087;
     
-    if let Err(e) = CircuitBreaker::retry(DEFAULT_MAX_RETRIES, || {
-        EntryGate::check_in(&my_permit)
-    }) {
-        match &e {
-            ValidationError::InvalidPermit(id) => error!(gate = "entry", permit_id = id, "凭证异常"),
-            ValidationError::InvalidJson(err) => error!(gate = "entry", detail = err.as_str(), "JSON 异常"),
-            ValidationError::InvalidStatus(s) => error!(gate = "entry", status = s, "状态异常"),
-        }
-        /*
-           待补充决策：未来按错误类型触发不同策略
-        */
-        return; // 查验不合格，拦截在门外！
+    if let Err(_e) = CircuitBreaker::retry(
+        DEFAULT_MAX_RETRIES,
+        || EntryGate::check_in(&my_permit),
+        |err, attempt| {
+            // 每次失败的回调 —— 未来 planner 在这里根据错误类型调整重试参数
+            match err {
+                ValidationError::InvalidPermit(id) => warn!(gate = "entry", attempt = attempt, permit_id = id, "凭证异常"),
+                ValidationError::InvalidJson(detail) => warn!(gate = "entry", attempt = attempt, detail = detail.as_str(), "JSON 异常"),
+                ValidationError::InvalidStatus(s) => warn!(gate = "entry", attempt = attempt, status = %s, "状态异常"),
+            }
+        },
+    ) {
+        my_permit.permit_status = my_permit.permit_status.block()
+            .expect("状态转换失败：无法切换到 Blocked");
+        error!(status = %my_permit.permit_status, "进门校验最终失败，任务已挂起");
+        return;
     }
 
     info!("工具执行完毕，数据安全回到agent，进入下一轮思考。");

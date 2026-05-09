@@ -1,6 +1,7 @@
 // errors.rs — 统一错误类型
 // 描述相关错误
 use std::fmt;
+use crate::entity::status::Status;
 
 /// 校验相关的错误类型
 #[derive(Debug, PartialEq)]
@@ -9,8 +10,8 @@ pub enum ValidationError {
     InvalidPermit(u64),
     /// JSON格式不合法（携带原始解析错误）
     InvalidJson(String),
-    /// 状态码异常（携带实际收到的状态码）
-    InvalidStatus(u8),
+    /// 状态码异常（携带实际收到的状态）
+    InvalidStatus(Status),
 }
 
 impl fmt::Display for ValidationError {
@@ -23,7 +24,7 @@ impl fmt::Display for ValidationError {
                 write!(f, "JSON 校验失败：{}", err)
             }
             ValidationError::InvalidStatus(status) => {
-                write!(f, "状态码异常：期望 0 (Ready)，实际为 {}", status)
+                write!(f, "状态码异常：期望 Ready，实际为 {}", status)
             }
         }
     }
