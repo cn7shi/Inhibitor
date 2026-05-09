@@ -16,3 +16,30 @@ pub fn validate_json(payload: &str) -> Result<(), ValidationError> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_valid_json() {
+        assert!(validate_json("{}").is_ok());
+        assert!(validate_json("{\"key\": \"value\"}").is_ok());
+        assert!(validate_json("[1, 2, 3]").is_ok());
+    }
+
+    #[test]
+    fn test_empty_payload() {
+        // 空字符串应该被拒绝
+        assert!(validate_json("").is_err());
+        assert!(validate_json("   ").is_err());
+    }
+
+    #[test]
+    fn test_invalid_json_format() {
+        // 缺少引号、缺少括号等
+        assert!(validate_json("{key: value}").is_err());
+        assert!(validate_json("{\"key\": }").is_err());
+        assert!(validate_json("not json at all").is_err());
+    }
+}

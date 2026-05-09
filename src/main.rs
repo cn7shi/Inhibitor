@@ -17,19 +17,24 @@ use strategies::circuit_breaker::CircuitBreaker;
 use component::groq_test::GroqTest;
 use constant::DEFAULT_MAX_RETRIES;
 use errors::ValidationError;
+use tracing::{info, error};
 
 
 
 #[tokio::main]
 async fn main() {
-    println!("=== 极简网关测试 ===");
+    // 初始化日志订阅器
+    tracing_subscriber::fmt()
+        .with_target(false)
+        .init();
+
+    info!("=== 极简网关测试 ===");
     
     //任务开始  测试加mut
     let  my_permit = Registry::enroll_task();
     
     // 打印Permit
-    println!("[内部登记] 拿到的凭证: {:#?}", my_permit);
-    // my_permit.permit_id = 10087;
+    info!(permit_id = my_permit.permit_id, status = my_permit.permit_status, "拿到凭证");
 
     /* 
         2.出门安检 (Exit)：准备离开agemt，去调用外部工具 （拿着刚初始化的 permit，检查状态是否干净）
@@ -40,22 +45,22 @@ async fn main() {
         ExitGate::check_out(&my_permit)
     }) {
         match &e {
-            ValidationError::InvalidPermit(id) => println!("🔴 [出门守卫] 凭证异常 (ID: {})", id),
-            ValidationError::InvalidJson(err) => println!("🔴 [出门守卫] JSON 异常: {}", err),
-            ValidationError::InvalidStatus(s) => println!("🔴 [出门守卫] 状态异常 (Status: {})", s),
+            ValidationError::InvalidPermit(id) => error!(gate = "exit", permit_id = id, "凭证异常"),
+            ValidationError::InvalidJson(err) => error!(gate = "exit", detail = err.as_str(), "JSON 异常"),
+            ValidationError::InvalidStatus(s) => error!(gate = "exit", status = s, "状态异常"),
         }
         return; // 重试3次都失败，才真正放弃
     }
 
     // 3. 核心执行 (Execute)：调用 Groq API
-    println!("[外部执行] 离开agent，正在调用 Groq API...");
+    info!("离开agent，正在调用 Groq API...");
     match GroqTest::call("你好，请用一句话介绍你自己。").await {
         Ok(reply) => {
-            println!("[外部执行] ✅ API 返回结果:");
+            info!("API 返回结果:");
             println!("{}", reply);
         }
         Err(e) => {
-            println!("[外部执行] {}", e);
+            error!(error = %e, "外部执行失败");
             return;
         }
     }
@@ -69,9 +74,9 @@ async fn main() {
         EntryGate::check_in(&my_permit)
     }) {
         match &e {
-            ValidationError::InvalidPermit(id) => println!("🔴 [进门守卫] 凭证异常 (ID: {})", id),
-            ValidationError::InvalidJson(err) => println!("🔴 [进门守卫] JSON 异常: {}", err),
-            ValidationError::InvalidStatus(s) => println!("🔴 [进门守卫] 状态异常 (Status: {})", s),
+            ValidationError::InvalidPermit(id) => error!(gate = "entry", permit_id = id, "凭证异常"),
+            ValidationError::InvalidJson(err) => error!(gate = "entry", detail = err.as_str(), "JSON 异常"),
+            ValidationError::InvalidStatus(s) => error!(gate = "entry", status = s, "状态异常"),
         }
         /*
            待补充决策：未来按错误类型触发不同策略
@@ -79,17 +84,17 @@ async fn main() {
         return; // 查验不合格，拦截在门外！
     }
 
-    println!("[主流程] 恭喜！工具执行完毕，数据安全回到agent，进入下一轮思考。");
+    info!("工具执行完毕，数据安全回到agent，进入下一轮思考。");
 
     // ===== 工具调用测试 =====
-    println!("\n=== 工具调用测试 ===");
+    info!("=== 工具调用测试 ===");
     match GroqTest::call_with_tools("What's the weather in San Francisco?").await {
         Ok(reply) => {
-            println!("[工具调用] ✅ 最终回复:");
+            info!("工具调用最终回复:");
             println!("{}", reply);
         }
         Err(e) => {
-            println!("[工具调用] ❌ {}", e);
+            error!(error = %e, "工具调用失败");
         }
     }
 

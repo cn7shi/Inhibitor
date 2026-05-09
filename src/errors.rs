@@ -3,7 +3,7 @@
 use std::fmt;
 
 /// 校验相关的错误类型
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ValidationError {
     /// 凭证ID不合法（携带实际收到的ID）
     InvalidPermit(u64),
