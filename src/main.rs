@@ -16,7 +16,7 @@ use gate::exitgate::ExitGate;
 use strategies::circuit_breaker::CircuitBreaker;
 use component::groq_test::GroqTest;
 use constant::DEFAULT_MAX_RETRIES;
-use errors::GateError;
+use errors::{EntryGateError, ExitGateError};
 use tracing::{info, warn, error};
 
 
@@ -45,11 +45,10 @@ async fn main() {
         DEFAULT_MAX_RETRIES,
         || ExitGate::check_out(&mut my_permit),
         |err, attempt| {
-            // 每次失败的回调 —— 未来 planner 在这里根据错误类型调整重试参数
             match err {
-                GateError::Permit(e) => warn!(gate = "exit", attempt = attempt, error = %e, "凭证异常"),
-                GateError::Json(e)   => warn!(gate = "exit", attempt = attempt, error = %e, "JSON 异常"),
-                GateError::Status(e) => warn!(gate = "exit", attempt = attempt, error = %e, "状态异常"),
+                ExitGateError::Permit(e) => warn!(gate = "exit", attempt = attempt, error = %e, "凭证异常"),
+                ExitGateError::Json(e)   => warn!(gate = "exit", attempt = attempt, error = %e, "JSON 异常"),
+                ExitGateError::Status(e) => warn!(gate = "exit", attempt = attempt, error = %e, "状态异常"),
             }
         },
     ) {
@@ -83,11 +82,10 @@ async fn main() {
         DEFAULT_MAX_RETRIES,
         || EntryGate::check_in(&my_permit),
         |err, attempt| {
-            // 每次失败的回调 —— 未来 planner 在这里根据错误类型调整重试参数
             match err {
-                GateError::Permit(e) => warn!(gate = "entry", attempt = attempt, error = %e, "凭证异常"),
-                GateError::Json(e)   => warn!(gate = "entry", attempt = attempt, error = %e, "JSON 异常"),
-                GateError::Status(e) => warn!(gate = "entry", attempt = attempt, error = %e, "状态异常"),
+                EntryGateError::Permit(e) => warn!(gate = "entry", attempt = attempt, error = %e, "凭证异常"),
+                EntryGateError::Json(e)   => warn!(gate = "entry", attempt = attempt, error = %e, "JSON 异常"),
+                EntryGateError::Status(e) => warn!(gate = "entry", attempt = attempt, error = %e, "状态异常"),
             }
         },
     ) {

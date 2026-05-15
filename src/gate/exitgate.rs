@@ -2,7 +2,7 @@
 
 use crate::entity::permit::Permit;
 use crate::entity::status::Status;
-use crate::errors::{GateError, StatusError};
+use crate::errors::{ExitGateError, StatusError};
 use crate::validator::permit::validate_permit_id;
 use crate::validator::json::validate_json;
 use crate::validator::status::ensure_ready;
@@ -12,7 +12,7 @@ pub struct ExitGate {}
 
 impl ExitGate {
     // 出门刷卡 (出参校验) — 校验通过后将状态改为 Running
-    pub fn check_out(permit: &mut Permit) -> Result<(), GateError> {
+    pub fn check_out(permit: &mut Permit) -> Result<(), ExitGateError> {
         ensure_ready(permit.permit_status).inspect_err(|e| {
             warn!(gate = "exit", error = %e, "出参校验失败");
         })?;
@@ -33,7 +33,7 @@ impl ExitGate {
             }
             Err(msg) => {
                 error!(gate = "exit", error = msg.as_str(), "状态转换异常");
-                return Err(GateError::Status(StatusError::Unexpected {
+                return Err(ExitGateError::Status(StatusError::Unexpected {
                     expected: Status::Ready,
                     actual: permit.permit_status,
                 }));
