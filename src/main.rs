@@ -16,7 +16,7 @@ use gate::exitgate::ExitGate;
 use strategies::circuit_breaker::CircuitBreaker;
 use component::groq_test::GroqTest;
 use constant::DEFAULT_MAX_RETRIES;
-use errors::ValidationError;
+use errors::GateError;
 use tracing::{info, warn, error};
 
 
@@ -47,14 +47,16 @@ async fn main() {
         |err, attempt| {
             // 每次失败的回调 —— 未来 planner 在这里根据错误类型调整重试参数
             match err {
-                ValidationError::InvalidPermit(id) => warn!(gate = "exit", attempt = attempt, permit_id = id, "凭证异常"),
-                ValidationError::InvalidJson(detail) => warn!(gate = "exit", attempt = attempt, detail = detail.as_str(), "JSON 异常"),
-                ValidationError::InvalidStatus(s) => warn!(gate = "exit", attempt = attempt, status = %s, "状态异常"),
+                GateError::Permit(e) => warn!(gate = "exit", attempt = attempt, error = %e, "凭证异常"),
+                GateError::Json(e)   => warn!(gate = "exit", attempt = attempt, error = %e, "JSON 异常"),
+                GateError::Status(e) => warn!(gate = "exit", attempt = attempt, error = %e, "状态异常"),
             }
         },
     ) {
-        my_permit.permit_status = my_permit.permit_status.block()
-            .expect("状态转换失败：无法切换到 Blocked");
+        match my_permit.permit_status.block() {
+            Ok(blocked) => my_permit.permit_status = blocked,
+            Err(msg) => error!(error = msg.as_str(), "状态转换异常"),
+        }
         error!(status = %my_permit.permit_status, "出门校验最终失败，任务已挂起");
         return;
     }
@@ -83,14 +85,16 @@ async fn main() {
         |err, attempt| {
             // 每次失败的回调 —— 未来 planner 在这里根据错误类型调整重试参数
             match err {
-                ValidationError::InvalidPermit(id) => warn!(gate = "entry", attempt = attempt, permit_id = id, "凭证异常"),
-                ValidationError::InvalidJson(detail) => warn!(gate = "entry", attempt = attempt, detail = detail.as_str(), "JSON 异常"),
-                ValidationError::InvalidStatus(s) => warn!(gate = "entry", attempt = attempt, status = %s, "状态异常"),
+                GateError::Permit(e) => warn!(gate = "entry", attempt = attempt, error = %e, "凭证异常"),
+                GateError::Json(e)   => warn!(gate = "entry", attempt = attempt, error = %e, "JSON 异常"),
+                GateError::Status(e) => warn!(gate = "entry", attempt = attempt, error = %e, "状态异常"),
             }
         },
     ) {
-        my_permit.permit_status = my_permit.permit_status.block()
-            .expect("状态转换失败：无法切换到 Blocked");
+        match my_permit.permit_status.block() {
+            Ok(blocked) => my_permit.permit_status = blocked,
+            Err(msg) => error!(error = msg.as_str(), "状态转换异常"),
+        }
         error!(status = %my_permit.permit_status, "进门校验最终失败，任务已挂起");
         return;
     }

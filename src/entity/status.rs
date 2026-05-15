@@ -24,11 +24,11 @@ impl Status {
         }
     }
 
-    /// Running → Blocked（熔断，挂起任务）
+    /// 任意状态(除 Done) → Blocked（紧急制动）
     pub fn block(self) -> Result<Status, String> {
         match self {
-            Status::Running | Status::Ready => Ok(Status::Blocked),
-            other => Err(format!("非法转换：{} → Blocked", other)),
+            Status::Done => Err(format!("非法转换：Done → Blocked")),
+            _ => Ok(Status::Blocked),
         }
     }
 
