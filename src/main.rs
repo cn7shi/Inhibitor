@@ -11,8 +11,8 @@ mod errors;
 
 
 use component::register::Registry;
-use gate::entrygate::EntryGate;
-use gate::exitgate::ExitGate;
+use gate::entry_gate::EntryGate;
+use gate::exit_gate::ExitGate;
 use strategies::circuit_breaker::CircuitBreaker;
 use component::groq_test::GroqTest;
 use constant::DEFAULT_MAX_RETRIES;
@@ -44,11 +44,13 @@ async fn main() {
     if let Err(_e) = CircuitBreaker::retry(
         DEFAULT_MAX_RETRIES,
         || ExitGate::check_out(&mut my_permit),
-        |err, attempt| {
-            match err {
-                ExitGateError::Permit(e) => warn!(gate = "exit", attempt = attempt, error = %e, "凭证异常"),
-                ExitGateError::Json(e)   => warn!(gate = "exit", attempt = attempt, error = %e, "JSON 异常"),
-                ExitGateError::Status(e) => warn!(gate = "exit", attempt = attempt, error = %e, "状态异常"),
+        |errors, attempt| {
+            for err in errors {
+                match err {
+                    ExitGateError::Permit(e) => warn!(gate = "exit", attempt = attempt, error = %e, "凭证异常"),
+                    ExitGateError::Json(e)   => warn!(gate = "exit", attempt = attempt, error = %e, "JSON 异常"),
+                    ExitGateError::Status(e) => warn!(gate = "exit", attempt = attempt, error = %e, "状态异常"),
+                }
             }
         },
     ) {
@@ -81,11 +83,13 @@ async fn main() {
     if let Err(_e) = CircuitBreaker::retry(
         DEFAULT_MAX_RETRIES,
         || EntryGate::check_in(&my_permit),
-        |err, attempt| {
-            match err {
-                EntryGateError::Permit(e) => warn!(gate = "entry", attempt = attempt, error = %e, "凭证异常"),
-                EntryGateError::Json(e)   => warn!(gate = "entry", attempt = attempt, error = %e, "JSON 异常"),
-                EntryGateError::Status(e) => warn!(gate = "entry", attempt = attempt, error = %e, "状态异常"),
+        |errors, attempt| {
+            for err in errors {
+                match err {
+                    EntryGateError::Permit(e) => warn!(gate = "entry", attempt = attempt, error = %e, "凭证异常"),
+                    EntryGateError::Json(e)   => warn!(gate = "entry", attempt = attempt, error = %e, "JSON 异常"),
+                    EntryGateError::Status(e) => warn!(gate = "entry", attempt = attempt, error = %e, "状态异常"),
+                }
             }
         },
     ) {

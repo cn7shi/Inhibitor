@@ -7,6 +7,7 @@ pub struct CircuitBreaker;
 
 impl CircuitBreaker {
     /// 带回调的重试：每次失败都调用 on_error，让外部感知并调整策略
+    /// E 不要求 Display：错误的打印职责完全由 on_error 回调承担
     pub fn retry<T, E, F, H>(
         max_retries: u32,
         mut operation: F,
@@ -15,7 +16,6 @@ impl CircuitBreaker {
     where
         F: FnMut() -> Result<T, E>,
         H: FnMut(&E, u32),   // (错误引用, 第几次尝试)
-        E: std::fmt::Display,
     {
         let mut last_err;
 
@@ -23,7 +23,7 @@ impl CircuitBreaker {
         match operation() {
             Ok(val) => return Ok(val),
             Err(e) => {
-                warn!(component = "circuit_breaker", attempt = 0, error = %e, "执行失败");
+                warn!(component = "circuit_breaker", attempt = 0, "执行失败");
                 on_error(&e, 0);
                 last_err = e;
             }
@@ -38,7 +38,7 @@ impl CircuitBreaker {
                     return Ok(val);
                 }
                 Err(e) => {
-                    warn!(component = "circuit_breaker", attempt = attempt, error = %e, "重试失败");
+                    warn!(component = "circuit_breaker", attempt = attempt, "重试失败");
                     on_error(&e, attempt);
                     last_err = e;
                 }

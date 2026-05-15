@@ -5,6 +5,8 @@ use crate::errors::JsonError;
 /// 校验 JSON 字符串是否合法
 /// 1. 不能为空
 /// 2. 必须是合法的 JSON 格式
+//此处先保留ignoreAny零拷贝写法的意见
+//保留定义结构体，提取json必要信息的意见
 pub fn validate_json(payload: &str) -> Result<(), JsonError> {
     if payload.trim().is_empty() {
         return Err(JsonError::Empty);
