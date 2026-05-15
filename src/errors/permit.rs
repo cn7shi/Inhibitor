@@ -1,19 +1,8 @@
 // errors/permit.rs — 凭证相关的错误类型
-use std::fmt;
+use thiserror::Error;
 
-/// 凭证校验失败的错误
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum PermitError {
-    /// 凭证ID不合法（携带实际收到的ID）
+    #[error("凭证ID校验失败：期望 10086，实际为 {0}")]
     InvalidId(u64),
-}
-
-impl fmt::Display for PermitError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PermitError::InvalidId(id) => {
-                write!(f, "凭证ID校验失败：期望 10086，实际为 {}", id)
-            }
-        }
-    }
 }

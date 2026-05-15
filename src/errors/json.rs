@@ -1,19 +1,11 @@
 // errors/json.rs — JSON 相关的错误类型
-use std::fmt;
+use thiserror::Error;
 
-/// JSON 校验失败的错误
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Error)]
 pub enum JsonError {
-    /// JSON格式不合法（携带原始解析错误信息）
-    Invalid(String),
-}
+    #[error("JSON 校验失败：内容为空")]
+    Empty,
 
-impl fmt::Display for JsonError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            JsonError::Invalid(err) => {
-                write!(f, "JSON 校验失败：{}", err)
-            }
-        }
-    }
+    #[error("JSON 校验失败：{0}")]
+    ParseFailed(#[from] serde_json::Error),
 }
