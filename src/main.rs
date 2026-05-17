@@ -11,16 +11,23 @@ mod errors;
 mod telemetry;
 mod gateway;
 
+use entity::permit::Permit;
 use component::register::Registry;
 use gate::entry_gate::EntryGate;
 use gate::exit_gate::ExitGate;
 use strategies::circuit_breaker::CircuitBreaker;
 use component::groq_test::GroqTest;
 use constant::DEFAULT_MAX_RETRIES;
-use errors::{EntryGateError, ExitGateError};
-use tracing::{info, warn, error};
+use tracing::{info, error};
 
-
+/// 熔断挂起：转 Blocked 并记录日志
+fn block_and_log(permit: &mut Permit, gate: &str) {
+    match permit.permit_status.block() {
+        Ok(blocked) => permit.permit_status = blocked,
+        Err(msg) => error!(error = msg.as_str(), "状态转换异常"),
+    }
+    error!(gate = gate, status = %permit.permit_status, "校验最终失败，任务已挂起");
+}
 
 #[tokio::main]
 async fn main() {
@@ -45,26 +52,14 @@ async fn main() {
     /* 
         2.出门安检 (Exit)：准备离开agemt，去调用外部工具 （拿着刚初始化的 permit，检查状态是否干净）
     */
-   
-    // 用熔断器包裹：失败自动重试3次
-    if let Err(_e) = CircuitBreaker::retry(
+
+    // 用熔断器包裹：失败自动重试3次（日志由 Gate 和 CircuitBreaker 内部负责）
+    if CircuitBreaker::retry(
         DEFAULT_MAX_RETRIES,
         || ExitGate::check_out(&mut my_permit),
-        |errors, attempt| {
-            for err in errors {
-                match err {
-                    ExitGateError::Permit(e) => warn!(gate = "exit", attempt = attempt, error = %e, "凭证异常"),
-                    ExitGateError::Json(e)   => warn!(gate = "exit", attempt = attempt, error = %e, "JSON 异常"),
-                    ExitGateError::Status(e) => warn!(gate = "exit", attempt = attempt, error = %e, "状态异常"),
-                }
-            }
-        },
-    ) {
-        match my_permit.permit_status.block() {
-            Ok(blocked) => my_permit.permit_status = blocked,
-            Err(msg) => error!(error = msg.as_str(), "状态转换异常"),
-        }
-        error!(status = %my_permit.permit_status, "出门校验最终失败，任务已挂起");
+        |_, _| {},
+    ).is_err() {
+        block_and_log(&mut my_permit, "exit");
         return;
     }
 
@@ -80,34 +75,25 @@ async fn main() {
     //         return;
     //     }
     // }
-    
 
     // 4. 进门安检 (Entry)：工具带着结果回来了，准备进入agent
     // （查验带回来的 permit_id 是否合法）
     // my_permit.permit_id = 10087;
-    
-    if let Err(_e) = CircuitBreaker::retry(
+
+    if CircuitBreaker::retry(
         DEFAULT_MAX_RETRIES,
         || EntryGate::check_in(&my_permit),
-        |errors, attempt| {
-            for err in errors {
-                match err {
-                    EntryGateError::Permit(e) => warn!(gate = "entry", attempt = attempt, error = %e, "凭证异常"),
-                    EntryGateError::Json(e)   => warn!(gate = "entry", attempt = attempt, error = %e, "JSON 异常"),
-                    EntryGateError::Status(e) => warn!(gate = "entry", attempt = attempt, error = %e, "状态异常"),
-                }
-            }
-        },
-    ) {
-        match my_permit.permit_status.block() {
-            Ok(blocked) => my_permit.permit_status = blocked,
-            Err(msg) => error!(error = msg.as_str(), "状态转换异常"),
-        }
-        error!(status = %my_permit.permit_status, "进门校验最终失败，任务已挂起");
+        |_, _| {},
+    ).is_err() {
+        block_and_log(&mut my_permit, "entry");
         return;
     }
 
-    info!("工具执行完毕，数据安全回到agent，进入下一轮思考。");
+    match my_permit.permit_status.finish() {
+        Ok(done) => my_permit.permit_status = done,
+        Err(msg) => error!(error = msg.as_str(), "状态转换异常"),
+    }
+    info!(status = %my_permit.permit_status, "工具执行完毕，数据安全回到agent，进入下一轮思考。");
 
     // ===== 工具调用测试 =====
     info!("=== 工具调用测试 ===");
