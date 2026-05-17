@@ -6,7 +6,7 @@ use axum::{
 use tracing::{info, error};
 
 pub async fn proxy_handler(
-    Json(payload): Json<serde_json::Value>,
+    Json(mut payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     info!("========== 收到外部请求 (透明网关) ==========");
     info!("转发的内容:\n{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
@@ -18,6 +18,13 @@ pub async fn proxy_handler(
             return (StatusCode::INTERNAL_SERVER_ERROR, "Config Error").into_response();
         }
     };
+
+    // 【新增逻辑】：拦截并覆盖模型名称
+    // 强制把别人传过来的模型名称，替换成我们 config.toml 里配置的模型（例如 "openai/gpt-oss-120b"）
+    if let Some(obj) = payload.as_object_mut() {
+        obj.insert("model".to_string(), serde_json::json!(cfg.model));
+    }
+    info!("已强制将请求模型重定向为系统默认模型: {}", cfg.model);
 
     let client = reqwest::Client::new();
     
@@ -65,6 +72,16 @@ pub async fn proxy_handler(
     // 如果是错误响应，顺便打印出来
     if !status.is_success() {
         error!("上游 API 报错: {}", json_resp);
+    }
+
+    // 尝试提取大模型的具体回复内容并记录到日志
+    if let Some(choices) = json_resp.get("choices") {
+        if let Some(first_choice) = choices.as_array().and_then(|c| c.first()) {
+            if let Some(message) = first_choice.get("message") {
+                let content = message.get("content").and_then(|v| v.as_str()).unwrap_or("(无文本回复)");
+                info!("========== 上游模型回复内容 ==========\n{}", content);
+            }
+        }
     }
 
     info!("响应获取完毕，正在原样返回给请求方...");

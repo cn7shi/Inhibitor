@@ -69,17 +69,17 @@ async fn main() {
     }
 
     // 3. 核心执行 (Execute)：调用 Groq API
-    info!("离开agent，正在调用 Groq API...");
-    match GroqTest::call("你好，请用一句话介绍你自己。").await {
-        Ok(reply) => {
-            info!("API 返回结果:");
-            println!("{}", reply);
-        }
-        Err(e) => {
-            error!(error = %e, "外部执行失败");
-            return;
-        }
-    }
+    // info!("离开agent，正在调用 Groq API...");
+    // match GroqTest::call("你好，请用一句话介绍你自己。").await {
+    //     Ok(reply) => {
+    //         info!("API 返回结果:");
+    //         println!("{}", reply);
+    //     }
+    //     Err(e) => {
+    //         error!(error = %e, "外部执行失败");
+    //         return;
+    //     }
+    // }
     
 
     // 4. 进门安检 (Entry)：工具带着结果回来了，准备进入agent
@@ -121,8 +121,8 @@ async fn main() {
         }
     }
 
-    info!("所有任务执行完毕，等待15秒后进行下一轮...");
-    tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+    info!("所有任务执行完毕，等待180秒后进行下一轮...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(180)).await;
     }
 }
 //执行流水线

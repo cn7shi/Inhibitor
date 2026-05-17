@@ -20,7 +20,12 @@
     
     <div class="log-container">
       <div class="terminal" ref="terminalRef" @scroll="handleScroll">
-        <div v-for="(log, index) in logs" :key="index" class="log-entry" :class="getLogLevel(log)">
+        <div 
+          v-for="(log, index) in logs" 
+          :key="index" 
+          class="log-entry" 
+          :class="[getLogLevel(log), { 'highlight-response': log.includes('上游模型回复内容') || log.includes('工具调用最终回复') }]"
+        >
           <span class="timestamp">{{ new Date().toLocaleTimeString() }}</span>
           <span class="content">{{ log }}</span>
         </div>
@@ -279,5 +284,27 @@ onUnmounted(() => {
   color: var(--text-secondary);
   font-style: italic;
   opacity: 0.5;
+}
+
+/* 大模型回复高亮特效 - 极简极客风 */
+.highlight-response {
+  background: rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-left: 3px solid var(--accent);
+  padding: 1rem 1.2rem !important;
+  margin: 0.75rem 0 !important;
+  border-radius: 6px;
+}
+
+.highlight-response .content {
+  color: #e2e8f0 !important;
+  font-weight: 400;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.highlight-response .timestamp {
+  color: var(--accent);
+  opacity: 0.7;
 }
 </style>
