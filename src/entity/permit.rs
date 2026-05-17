@@ -13,3 +13,14 @@ pub struct Permit{
     pub permit_status: Status,      //任务状态
     pub payload: String,            // 用于传输 JSON 数据
 }
+
+impl Permit {
+    /// 触发熔断挂起，并自动记录日志
+    pub fn block_with_log(&mut self, gate: &str) {
+        match self.permit_status.block() {
+            Ok(blocked) => self.permit_status = blocked,
+            Err(msg) => tracing::error!(error = msg.as_str(), "状态转换异常"),
+        }
+        tracing::error!(gate = gate, status = %self.permit_status, "校验最终失败，任务已挂起");
+    }
+}
