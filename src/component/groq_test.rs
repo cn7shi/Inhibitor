@@ -72,7 +72,7 @@ impl GroqTest {
             "max_completion_tokens": 1024
         });
 
-        println!("[工具调用] 第1轮：发送消息 + 工具定义...");
+        tracing::info!("[工具调用] 第1轮：发送消息 + 工具定义...");
         let json = Self::send_request(&cfg.groq_api_key, &body).await?;
 
         // 检查模型是否要调用工具
@@ -91,14 +91,14 @@ impl GroqTest {
         let func_name = tool_call["function"]["name"].as_str().unwrap_or("");
         let func_args = tool_call["function"]["arguments"].as_str().unwrap_or("{}");
 
-        println!("[工具调用] 模型请求调用: {}({})", func_name, func_args);
+        tracing::info!("[工具调用] 模型请求调用: {}({})", func_name, func_args);
 
         // ===== 执行本地函数 =====
         let tool_result = match func_name {
             "get_weather" => Self::mock_get_weather(func_args),
             _ => format!("未知函数: {}", func_name),
         };
-        println!("[工具调用] 本地执行结果: {}", tool_result);
+        tracing::info!("[工具调用] 本地执行结果: {}", tool_result);
 
         // ===== 第2轮：把工具结果发回给模型 =====
         let mut round2_messages = messages.as_array().unwrap().clone();
@@ -117,7 +117,7 @@ impl GroqTest {
             "max_completion_tokens": 1024
         });
 
-        println!("[工具调用] 第2轮：把工具结果发回给模型...");
+        tracing::info!("[工具调用] 第2轮：把工具结果发回给模型...");
         let json2 = Self::send_request(&cfg.groq_api_key, &body2).await?;
 
         let final_reply = json2["choices"][0]["message"]["content"]
@@ -157,6 +157,24 @@ impl GroqTest {
         if !status.is_success() {
             let err_msg = json["error"]["message"].as_str().unwrap_or("未知错误");
             return Err(format!("API 错误 (HTTP {}): {}", status, err_msg));
+        }
+
+        // 记录发送的 JSON 数据
+        tracing::info!("===== 发送给 LLM 的 JSON =====");
+        tracing::info!("\n{}", serde_json::to_string_pretty(body).unwrap_or_default());
+
+        // 提取并记录 Token 消耗
+        let usage = &json["usage"];
+        if !usage.is_null() {
+            let prompt = usage["prompt_tokens"].as_i64().unwrap_or(0);
+            let completion = usage["completion_tokens"].as_i64().unwrap_or(0);
+            let total = usage["total_tokens"].as_i64().unwrap_or(0);
+            tracing::info!(
+                prompt_tokens = prompt,
+                completion_tokens = completion,
+                total_tokens = total,
+                "===== Token 消耗 ====="
+            );
         }
 
         Ok(json)

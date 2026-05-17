@@ -8,7 +8,8 @@ mod gate;
 mod strategies;
 mod validator;
 mod errors;
-
+mod telemetry;
+mod gateway;
 
 use component::register::Registry;
 use gate::entry_gate::EntryGate;
@@ -23,15 +24,20 @@ use tracing::{info, warn, error};
 
 #[tokio::main]
 async fn main() {
-    // 初始化日志订阅器
-    tracing_subscriber::fmt()
-        .with_target(false)
-        .init();
+    // 初始化日志订阅器和广播管道
+    let tx = telemetry::setup_tracing();
+    
+    // 启动日志监控后端服务
+    tokio::spawn(telemetry::start_server(tx));
+    
+    // 给服务器一点时间启动
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
     info!("=== 极简网关测试 ===");
     
-    //任务开始  测试加mut
-    let mut my_permit = Registry::enroll_task();
+    // 任务开始
+    loop {
+        let mut my_permit = Registry::enroll_task();
     
     // 打印Permit
     info!(permit_id = my_permit.permit_id, status = %my_permit.permit_status, "拿到凭证");
@@ -115,9 +121,9 @@ async fn main() {
         }
     }
 
-
-
-    
+    info!("所有任务执行完毕，等待15秒后进行下一轮...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+    }
 }
 //执行流水线
 /*
