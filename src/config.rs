@@ -7,6 +7,7 @@ use serde::Deserialize;
 pub struct Config {
     pub groq_api_key: String,
     pub model: String,
+    pub max_retries: u32,
 }
 
 impl Config {

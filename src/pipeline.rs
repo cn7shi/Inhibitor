@@ -3,10 +3,11 @@ use crate::gate::entry_gate::EntryGate;
 use crate::gate::exit_gate::ExitGate;
 use crate::strategies::circuit_breaker::CircuitBreaker;
 use crate::component::groq_test::GroqTest;
-use crate::constant::DEFAULT_MAX_RETRIES;
+use crate::config::Config;
 use tracing::{info, error};
 
 pub async fn run() {
+    let config = Config::load().expect("配置加载失败");
     info!("=== 极简网关测试 ===");
     
     // 任务开始
@@ -22,7 +23,7 @@ pub async fn run() {
 
         // 用熔断器包裹：失败自动重试3次（日志由 Gate 和 CircuitBreaker 内部负责）
         if CircuitBreaker::retry(
-            DEFAULT_MAX_RETRIES,
+            config.max_retries,
             || ExitGate::check_out(&mut my_permit),
             |_, _| {},
         ).is_err() {
@@ -48,7 +49,7 @@ pub async fn run() {
         // my_permit.permit_id = 10087;
 
         if CircuitBreaker::retry(
-            DEFAULT_MAX_RETRIES,
+            config.max_retries,
             || EntryGate::check_in(&my_permit),
             |_, _| {},
         ).is_err() {

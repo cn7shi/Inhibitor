@@ -3,7 +3,6 @@
 mod entity;
 mod component;
 mod config;
-mod constant;
 mod gate;
 mod strategies;
 mod validator;
