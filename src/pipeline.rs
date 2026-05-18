@@ -3,6 +3,7 @@ use crate::gate::entry_gate::EntryGate;
 use crate::gate::exit_gate::ExitGate;
 use crate::strategies::circuit_breaker::CircuitBreaker;
 use crate::component::groq_test::GroqTest;
+use crate::component::notify::Notify;
 use crate::config::Config;
 use tracing::{info, error};
 
@@ -28,6 +29,7 @@ pub async fn run() {
             |_, _| {},
         ).is_err() {
             my_permit.block_with_log("exit");
+            Notify::send("任务挂起 (Blocked)", &format!("Exit Gate 校验失败，任务ID: {}", my_permit.permit_id)).await;
             return;
         }
 
@@ -54,11 +56,15 @@ pub async fn run() {
             |_, _| {},
         ).is_err() {
             my_permit.block_with_log("entry");
+            Notify::send("任务挂起 (Blocked)", &format!("Entry Gate 校验失败，任务ID: {}", my_permit.permit_id)).await;
             return;
         }
 
         match my_permit.permit_status.finish() {
-            Ok(done) => my_permit.permit_status = done,
+            Ok(done) => {
+                my_permit.permit_status = done;
+                Notify::send("任务完成 (Done)", &format!("任务成功执行完毕，任务ID: {}", my_permit.permit_id)).await;
+            }
             Err(msg) => error!(error = msg.as_str(), "状态转换异常"),
         }
         info!(status = %my_permit.permit_status, "工具执行完毕，数据安全回到agent，进入下一轮思考。");

@@ -8,6 +8,12 @@ pub struct Config {
     pub groq_api_key: String,
     pub model: String,
     pub max_retries: u32,
+    #[serde(default)]
+    pub feishu_webhook: String,
+    #[serde(default)]
+    pub dingtalk_webhook: String,
+    #[serde(default)]
+    pub notify_keyword: String,
 }
 
 impl Config {
