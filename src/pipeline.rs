@@ -8,11 +8,13 @@ use crate::config::Config;
 use tracing::{info, error};
 
 pub async fn run() {
-    let config = Config::load().expect("配置加载失败");
     info!("=== 极简网关测试 ===");
     
     // 任务开始
     loop {
+        // 在循环内部加载配置，以支持热更新（例如 max_retries 的改变）
+        let config = Config::load().expect("配置加载失败");
+
         let mut my_permit = Registry::enroll_task();
     
         // 打印Permit

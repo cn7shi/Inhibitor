@@ -57,6 +57,7 @@ pub fn setup_tracing() -> broadcast::Sender<String> {
 pub async fn start_server(tx: broadcast::Sender<String>) {
     let app = Router::new()
         .route("/api/logs", get(sse_handler))
+        .route("/api/config", get(get_config_handler).post(update_config_handler))
         .route("/proxy/v1/chat/completions", post(crate::gateway::proxy_handler))
         .layer(CorsLayer::permissive())
         .with_state(tx);
@@ -81,3 +82,28 @@ async fn sse_handler(
 
     Sse::new(stream).keep_alive(axum::response::sse::KeepAlive::new())
 }
+
+// 获取当前配置
+async fn get_config_handler() -> axum::response::Result<axum::Json<crate::config::Config>, (axum::http::StatusCode, String)> {
+    match crate::config::Config::load() {
+        Ok(cfg) => Ok(axum::Json(cfg)),
+        Err(e) => Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, e)),
+    }
+}
+
+// 更新配置并保存到文件
+async fn update_config_handler(
+    axum::extract::Json(payload): axum::extract::Json<crate::config::Config>,
+) -> axum::response::Result<&'static str, (axum::http::StatusCode, String)> {
+    match payload.save() {
+        Ok(_) => {
+            tracing::info!("配置已通过 API 热更新");
+            Ok("Config updated successfully")
+        }
+        Err(e) => {
+            tracing::error!("保存配置失败: {}", e);
+            Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, e))
+        }
+    }
+}
+

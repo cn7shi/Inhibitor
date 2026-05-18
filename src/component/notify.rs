@@ -65,6 +65,34 @@ impl Notify {
         }
     }
 
+    /// Discord Webhook 通知
+    pub async fn send_discord(webhook_url: &str, title: &str, message: &str) {
+        if webhook_url.is_empty() {
+            return;
+        }
+
+        let client = Client::new();
+        let payload = json!({
+            "content": format!("**{}**\n{}", title, message)
+        });
+
+        match client.post(webhook_url).json(&payload).send().await {
+            Ok(res) => {
+                let status = res.status();
+                let body = res.text().await.unwrap_or_default();
+                // Discord 成功一般返回 204 No Content
+                if !status.is_success() {
+                    error!(status = %status, response = %body, "Discord 通知发送失败");
+                } else {
+                    info!("Discord 通知发送成功");
+                }
+            }
+            Err(e) => {
+                error!(error = %e, "Discord 通知请求异常");
+            }
+        }
+    }
+
     /// 统一发送通知入口（从配置文件获取 Webhook URL）
     pub async fn send(title: &str, message: &str) {
         use crate::config::Config;
@@ -78,6 +106,7 @@ impl Notify {
 
         let feishu_url = config.feishu_webhook;
         let dingtalk_url = config.dingtalk_webhook;
+        let discord_url = config.discord_webhook;
         let keyword = config.notify_keyword;
         
         let mut sent = false;
@@ -98,9 +127,14 @@ impl Notify {
             Self::send_dingtalk(&dingtalk_url, &final_title, message).await;
             sent = true;
         }
+
+        if !discord_url.is_empty() {
+            Self::send_discord(&discord_url, &final_title, message).await;
+            sent = true;
+        }
         
         if !sent {
-            warn!("未配置通知 Webhook (feishu_webhook / dingtalk_webhook)，跳过发送: {} - {}", title, message);
+            warn!("未配置通知 Webhook (feishu/dingtalk/discord)，跳过发送: {} - {}", title, message);
         }
     }
 }
