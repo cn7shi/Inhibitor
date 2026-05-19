@@ -10,6 +10,11 @@ const routes = [
     path: '/monitor',
     name: 'Monitor',
     component: () => import('../views/Monitor.vue')
+  },
+  {
+    path: '/settings',
+    name: 'Settings',
+    component: () => import('../views/Settings.vue')
   }
 ]
 

@@ -17,6 +17,11 @@
           <span class="icon">📊</span>
           <span class="label">Monitor</span>
         </router-link>
+        
+        <router-link to="/settings" class="nav-item" active-class="active">
+          <span class="icon">⚙️</span>
+          <span class="label">Settings</span>
+        </router-link>
       </nav>
       
       <div class="sidebar-footer">

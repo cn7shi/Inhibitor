@@ -6,6 +6,7 @@
 
 use thiserror::Error;
 use super::{JsonError, PermitError, StatusError};
+use crate::entity::san::Pollutant;
 
 #[derive(Debug, Error)]
 pub enum ExitGateError {
@@ -19,3 +20,25 @@ pub enum ExitGateError {
     #[error(transparent)]
     Status(#[from] StatusError),
 }
+
+impl Pollutant for ExitGateError {
+    fn weight(&self) -> i32 {
+        match self {
+            // 出站不太在乎格式（发给 LLM，它能理解）：×1
+            ExitGateError::Json(e) => e.weight(),
+            // 安全一样零容忍：×10
+            ExitGateError::Permit(e) => e.weight() * 10,
+            // 出站逻辑问题更严重（逻辑都错了还往外发）：×2
+            ExitGateError::Status(e) => e.weight() * 2,
+        }
+    }
+
+    fn error_key(&self) -> &'static str {
+        match self {
+            ExitGateError::Json(e) => e.error_key(),
+            ExitGateError::Permit(e) => e.error_key(),
+            ExitGateError::Status(e) => e.error_key(),
+        }
+    }
+}
+
