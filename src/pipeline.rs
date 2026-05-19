@@ -4,8 +4,10 @@ use crate::gate::exit_gate::ExitGate;
 use crate::strategies::circuit_breaker::CircuitBreaker;
 use crate::component::groq_test::GroqTest;
 use crate::component::notify::Notify;
+use crate::component::san_manager::SanManager;
 use crate::config::Config;
-use tracing::{info, error};
+use crate::entity::san::SanSchema;
+use tracing::{info, warn, error};
 
 pub async fn run() {
     info!("=== 极简网关测试 ===");
@@ -16,22 +18,31 @@ pub async fn run() {
         let config = Config::load().expect("配置加载失败");
 
         let mut my_permit = Registry::enroll_task();
+        // 每轮任务初始化 SAN 值（污染度）
+        let mut san = SanSchema::new(100);
     
         // 打印Permit
-        info!(permit_id = my_permit.permit_id, status = %my_permit.permit_status, "拿到凭证");
+        info!(permit_id = my_permit.permit_id, status = %my_permit.permit_status, san = san.current_san, "拿到凭证");
 
         /* 
             2.出门安检 (Exit)：准备离开agemt，去调用外部工具 （拿着刚初始化的 permit，检查状态是否干净）
         */
 
-        // 用熔断器包裹：失败自动重试3次（日志由 Gate 和 CircuitBreaker 内部负责）
+        // 用熔断器包裹：失败自动重试，每次失败扣减 SAN 值
         if CircuitBreaker::retry(
             config.max_retries,
             || ExitGate::check_out(&mut my_permit),
-            |_, _| {},
+            |errors, _attempt| {
+                for e in errors {
+                    SanManager::deduct(&mut san, e, &config.san_overrides);
+                }
+            },
         ).is_err() {
             my_permit.block_with_log("exit");
-            Notify::send("任务挂起 (Blocked)", &format!("Exit Gate 校验失败，任务ID: {}", my_permit.permit_id)).await;
+            if san.is_corrupted() {
+                warn!(san = san.current_san, "SAN 值归零，环境已被严重污染");
+            }
+            Notify::send("任务挂起 (Blocked)", &format!("Exit Gate 校验失败，任务ID: {}，SAN: {}/{}", my_permit.permit_id, san.current_san, san.max_san)).await;
             return;
         }
 
@@ -55,10 +66,17 @@ pub async fn run() {
         if CircuitBreaker::retry(
             config.max_retries,
             || EntryGate::check_in(&my_permit),
-            |_, _| {},
+            |errors, _attempt| {
+                for e in errors {
+                    SanManager::deduct(&mut san, e, &config.san_overrides);
+                }
+            },
         ).is_err() {
             my_permit.block_with_log("entry");
-            Notify::send("任务挂起 (Blocked)", &format!("Entry Gate 校验失败，任务ID: {}", my_permit.permit_id)).await;
+            if san.is_corrupted() {
+                warn!(san = san.current_san, "SAN 值归零，环境已被严重污染");
+            }
+            Notify::send("任务挂起 (Blocked)", &format!("Entry Gate 校验失败，任务ID: {}，SAN: {}/{}", my_permit.permit_id, san.current_san, san.max_san)).await;
             return;
         }
 

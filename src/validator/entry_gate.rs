@@ -2,7 +2,7 @@
 
 use crate::entity::permit::Permit;
 use crate::errors::EntryGateError;
-use super::{status::ensure_running, permit::validate_permit_id, json::validate_json};
+use super::{status::ensure_running, permit::validate_permit_id, json};
 
 /// 一次性运行所有入门校验，返回**所有**失败的错误
 /// 即使前面的校验失败，也继续检查后面的，避免一次只发现一个问题
@@ -15,9 +15,14 @@ pub fn run(permit: &Permit) -> Result<(), Vec<EntryGateError>> {
     if let Err(e) = validate_permit_id(permit.permit_id) {
         errors.push(e.into());
     }
-    if let Err(e) = validate_json(&permit.payload) {
+    // 入站两个都查：空不空 + 格式对不对（LLM 返回必须能解析）
+    if let Err(e) = json::check_not_empty(&permit.payload) {
+        errors.push(e.into());
+    }
+    if let Err(e) = json::check_format(&permit.payload) {
         errors.push(e.into());
     }
 
     if errors.is_empty() { Ok(()) } else { Err(errors) }
 }
+

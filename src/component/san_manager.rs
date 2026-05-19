@@ -30,7 +30,7 @@ impl SanManager {
             .copied()
             .unwrap_or_else(|| error.weight());
 
-        schema.current_san -= penalty;
+        schema.current_san = (schema.current_san - penalty).max(0);
 
         println!(
             "⚠️ [SAN] 错误: {}, 扣除: {}, 剩余: {}/{}",
@@ -38,21 +38,6 @@ impl SanManager {
         );
 
         penalty
-    }
-
-    /// 评估并执行扣减。如果 SAN 归零（<= 0），返回 Err 触发熔断。
-    pub fn evaluate(
-        schema: &mut SanSchema,
-        error: &dyn Pollutant,
-        overrides: &HashMap<String, i32>,
-    ) -> Result<(), &'static str> {
-        Self::deduct(schema, error, overrides);
-
-        if schema.is_corrupted() {
-            Err("SAN值归零，触发熔断器，任务状态将被重置或丢弃！")
-        } else {
-            Ok(())
-        }
     }
 }
 
