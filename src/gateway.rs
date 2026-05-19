@@ -5,7 +5,6 @@ use axum::{
 };
 use tracing::{info, warn, error};
 use crate::entity::san::SanSchema;
-use crate::component::san_manager::SanManager;
 
 pub async fn proxy_handler(
     Json(mut payload): Json<serde_json::Value>,
@@ -28,7 +27,9 @@ pub async fn proxy_handler(
     let payload_str = payload.to_string();
     if let Err(e) = crate::validator::json::check_not_empty(&payload_str) {
         warn!(gate = "gateway", error = %e, "请求 payload 为空");
-        SanManager::deduct(&mut san, &e, &cfg.san_overrides);
+        use crate::entity::san::Pollutant;
+        let penalty = cfg.san_overrides.get(e.error_key()).copied().unwrap_or_else(|| e.weight());
+        san.apply_penalty(penalty, e.error_key());
     }
 
     // 【新增逻辑】：拦截并覆盖模型名称

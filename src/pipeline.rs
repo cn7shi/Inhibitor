@@ -4,9 +4,8 @@ use crate::gate::exit_gate::ExitGate;
 use crate::strategies::circuit_breaker::CircuitBreaker;
 use crate::component::groq_test::GroqTest;
 use crate::component::notify::Notify;
-use crate::component::san_manager::SanManager;
+use crate::entity::san::{Pollutant, SanSchema};
 use crate::config::Config;
-use crate::entity::san::SanSchema;
 use tracing::{info, warn, error};
 
 pub async fn run() {
@@ -18,31 +17,35 @@ pub async fn run() {
         let config = Config::load().expect("配置加载失败");
 
         let mut my_permit = Registry::enroll_task();
-        // 每轮任务初始化 SAN 值（污染度）
-        let mut san = SanSchema::new(100);
     
         // 打印Permit
-        info!(permit_id = my_permit.permit_id, status = %my_permit.permit_status, san = san.current_san, "拿到凭证");
+        info!(permit_id = my_permit.permit_id, status = %my_permit.permit_status, san = my_permit.san.current_san, "拿到凭证");
 
         /* 
-            2.出门安检 (Exit)：准备离开agemt，去调用外部工具 （拿着刚初始化的 permit，检查状态是否干净）
+            2.出门安检 (Exit)：准备离开agemt，去调用外部工具
         */
 
-        // 用熔断器包裹：失败自动重试，每次失败扣减 SAN 值
-        if CircuitBreaker::retry(
+        // 临时取出 SAN，避免 &mut my_permit 和 &mut my_permit.san 的借用冲突
+        // Gate 校验不访问 san 字段，所以临时替换为空值是安全的
+        let mut san = std::mem::replace(&mut my_permit.san, SanSchema::new(0));
+        let exit_result = CircuitBreaker::retry(
             config.max_retries,
             || ExitGate::check_out(&mut my_permit),
-            |errors, _attempt| {
+            |errors, _| {
                 for e in errors {
-                    SanManager::deduct(&mut san, e, &config.san_overrides);
+                    let penalty = config.san_overrides.get(e.error_key()).copied().unwrap_or_else(|| e.weight());
+                    san.apply_penalty(penalty, e.error_key());
                 }
             },
-        ).is_err() {
+        );
+        my_permit.san = san; // 放回
+
+        if exit_result.is_err() {
             my_permit.block_with_log("exit");
-            if san.is_corrupted() {
-                warn!(san = san.current_san, "SAN 值归零，环境已被严重污染");
+            if my_permit.san.is_corrupted() {
+                warn!(san = my_permit.san.current_san, "SAN 值归零，环境已被严重污染");
             }
-            Notify::send("任务挂起 (Blocked)", &format!("Exit Gate 校验失败，任务ID: {}，SAN: {}/{}", my_permit.permit_id, san.current_san, san.max_san)).await;
+            Notify::send("任务挂起 (Blocked)", &format!("Exit Gate 校验失败，ID: {}，SAN: {}/{}", my_permit.permit_id, my_permit.san.current_san, my_permit.san.max_san)).await;
             return;
         }
 
@@ -60,34 +63,38 @@ pub async fn run() {
         // }
 
         // 4. 进门安检 (Entry)：工具带着结果回来了，准备进入agent
-        // （查验带回来的 permit_id 是否合法）
         // my_permit.permit_id = 10087;
 
-        if CircuitBreaker::retry(
+        let mut san = std::mem::replace(&mut my_permit.san, SanSchema::new(0));
+        let entry_result = CircuitBreaker::retry(
             config.max_retries,
             || EntryGate::check_in(&my_permit),
-            |errors, _attempt| {
+            |errors, _| {
                 for e in errors {
-                    SanManager::deduct(&mut san, e, &config.san_overrides);
+                    let penalty = config.san_overrides.get(e.error_key()).copied().unwrap_or_else(|| e.weight());
+                    san.apply_penalty(penalty, e.error_key());
                 }
             },
-        ).is_err() {
+        );
+        my_permit.san = san; // 放回
+
+        if entry_result.is_err() {
             my_permit.block_with_log("entry");
-            if san.is_corrupted() {
-                warn!(san = san.current_san, "SAN 值归零，环境已被严重污染");
+            if my_permit.san.is_corrupted() {
+                warn!(san = my_permit.san.current_san, "SAN 值归零，环境已被严重污染");
             }
-            Notify::send("任务挂起 (Blocked)", &format!("Entry Gate 校验失败，任务ID: {}，SAN: {}/{}", my_permit.permit_id, san.current_san, san.max_san)).await;
+            Notify::send("任务挂起 (Blocked)", &format!("Entry Gate 校验失败，ID: {}，SAN: {}/{}", my_permit.permit_id, my_permit.san.current_san, my_permit.san.max_san)).await;
             return;
         }
 
         match my_permit.permit_status.finish() {
             Ok(done) => {
                 my_permit.permit_status = done;
-                Notify::send("任务完成 (Done)", &format!("任务成功执行完毕，任务ID: {}", my_permit.permit_id)).await;
+                Notify::send("任务完成 (Done)", &format!("任务完成，ID: {}，最终SAN: {}/{}", my_permit.permit_id, my_permit.san.current_san, my_permit.san.max_san)).await;
             }
             Err(msg) => error!(error = msg.as_str(), "状态转换异常"),
         }
-        info!(status = %my_permit.permit_status, "工具执行完毕，数据安全回到agent，进入下一轮思考。");
+        info!(status = %my_permit.permit_status, san = my_permit.san.current_san, "工具执行完毕，数据安全回到agent，进入下一轮思考。");
 
         // ===== 工具调用测试 =====
         info!("=== 工具调用测试 ===");

@@ -2,6 +2,7 @@
 
 use crate::entity::permit::Permit;
 use crate::entity::status::Status;
+use crate::entity::san::SanSchema;
 
 pub struct Registry {}
 
@@ -12,6 +13,7 @@ impl Registry {
             permit_id: 10086,
             permit_status: Status::Ready,
             payload: "{}".to_string(),
+            san: SanSchema::new(100),
         }
     }
 }

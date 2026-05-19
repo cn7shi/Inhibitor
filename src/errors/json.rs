@@ -11,13 +11,17 @@ pub enum JsonError {
     ParseFailed(#[from] serde_json::Error),
 }
 
+/// JSON 错误固有权重
+const WEIGHT_EMPTY: i32 = 2;
+const WEIGHT_PARSE_FAILED: i32 = 5;
+
 impl Pollutant for JsonError {
     fn weight(&self) -> i32 {
         match self {
             // 空内容，可能 LLM 就是没输出，属于正常波动
-            JsonError::Empty => 2,
+            JsonError::Empty => WEIGHT_EMPTY,
             // 格式解析失败，需要关注但通常可重试
-            JsonError::ParseFailed(_) => 5,
+            JsonError::ParseFailed(_) => WEIGHT_PARSE_FAILED,
         }
     }
 

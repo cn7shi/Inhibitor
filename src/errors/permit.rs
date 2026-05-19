@@ -8,11 +8,14 @@ pub enum PermitError {
     InvalidId(u64),
 }
 
+/// 凭证错误固有权重
+const WEIGHT_INVALID_ID: i32 = 10;
+
 impl Pollutant for PermitError {
     fn weight(&self) -> i32 {
         match self {
             // 凭证无效 = 越权/伪造，安全类里最致命的
-            PermitError::InvalidId(_) => 10,
+            PermitError::InvalidId(_) => WEIGHT_INVALID_ID,
         }
     }
 

@@ -9,11 +9,14 @@ pub enum StatusError {
     Unexpected { expected: Status, actual: Status },
 }
 
+/// 状态错误固有权重
+const WEIGHT_UNEXPECTED: i32 = 5;
+
 impl Pollutant for StatusError {
     fn weight(&self) -> i32 {
         match self {
             // 状态不一致，逻辑流程出了问题，中等严重
-            StatusError::Unexpected { .. } => 5,
+            StatusError::Unexpected { .. } => WEIGHT_UNEXPECTED,
         }
     }
 

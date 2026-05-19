@@ -21,15 +21,20 @@ pub enum ExitGateError {
     Status(#[from] StatusError),
 }
 
+/// 出站场景乘数
+const MULTIPLIER_JSON: i32 = 1;
+const MULTIPLIER_PERMIT: i32 = 10;
+const MULTIPLIER_STATUS: i32 = 2;
+
 impl Pollutant for ExitGateError {
     fn weight(&self) -> i32 {
         match self {
-            // 出站不太在乎格式（发给 LLM，它能理解）：×1
-            ExitGateError::Json(e) => e.weight(),
-            // 安全一样零容忍：×10
-            ExitGateError::Permit(e) => e.weight() * 10,
-            // 出站逻辑问题更严重（逻辑都错了还往外发）：×2
-            ExitGateError::Status(e) => e.weight() * 2,
+            // 出站不太在乎格式（发给 LLM，它能理解）
+            ExitGateError::Json(e) => e.weight() * MULTIPLIER_JSON,
+            // 安全一样零容忍
+            ExitGateError::Permit(e) => e.weight() * MULTIPLIER_PERMIT,
+            // 出站逻辑问题更严重（逻辑都错了还往外发）
+            ExitGateError::Status(e) => e.weight() * MULTIPLIER_STATUS,
         }
     }
 

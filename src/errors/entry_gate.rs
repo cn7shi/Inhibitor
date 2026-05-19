@@ -19,15 +19,20 @@ pub enum EntryGateError {
     Status(#[from] StatusError),
 }
 
+/// 入站场景乘数
+const MULTIPLIER_JSON: i32 = 3;
+const MULTIPLIER_PERMIT: i32 = 10;
+const MULTIPLIER_STATUS: i32 = 1;
+
 impl Pollutant for EntryGateError {
     fn weight(&self) -> i32 {
         match self {
-            // 入站对格式极度敏感（LLM 返回必须能解析）：×3
-            EntryGateError::Json(e) => e.weight() * 3,
-            // 安全零容忍：×10
-            EntryGateError::Permit(e) => e.weight() * 10,
-            // 状态问题正常权重：×1
-            EntryGateError::Status(e) => e.weight(),
+            // 入站对格式极度敏感（LLM 返回必须能解析）
+            EntryGateError::Json(e) => e.weight() * MULTIPLIER_JSON,
+            // 安全零容忍
+            EntryGateError::Permit(e) => e.weight() * MULTIPLIER_PERMIT,
+            // 状态问题正常权重
+            EntryGateError::Status(e) => e.weight() * MULTIPLIER_STATUS,
         }
     }
 

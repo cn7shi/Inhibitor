@@ -28,6 +28,20 @@ impl SanSchema {
     pub fn is_corrupted(&self) -> bool {
         self.current_san <= 0
     }
+
+    /// 扣减 SAN 值（使用预计算的扣减量）。
+    /// 由 pipeline 在收集完错误后统一调用。
+    pub fn apply_penalty(&mut self, penalty: i32, error_key: &str) {
+        self.current_san = (self.current_san - penalty).max(0);
+        tracing::warn!(
+            component = "san",
+            error_key = error_key,
+            penalty = penalty,
+            remaining = self.current_san,
+            max = self.max_san,
+            "SAN 扣减"
+        );
+    }
 }
 
 /// 污染物 trait —— 任何可能污染全局环境（扣减 SAN 值）的错误都应实现此 trait。
