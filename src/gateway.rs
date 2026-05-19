@@ -3,13 +3,15 @@ use axum::{
     response::IntoResponse,
     http::StatusCode,
 };
-use tracing::{info, error};
+use tracing::{info, warn, error};
+use crate::entity::san::SanSchema;
+use crate::component::san_manager::SanManager;
 
 pub async fn proxy_handler(
     Json(mut payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     info!("========== 收到外部请求 (透明网关) ==========");
-    info!("转发的内容:\n{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+    info!("转发的内容:\n{}", serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "(序列化失败)".to_string()));
 
     let cfg = match crate::config::Config::load() {
         Ok(c) => c,
@@ -18,6 +20,16 @@ pub async fn proxy_handler(
             return (StatusCode::INTERNAL_SERVER_ERROR, "Config Error").into_response();
         }
     };
+
+    // 初始化本次请求的 SAN 值
+    let mut san = SanSchema::new(100);
+
+    // 【入口校验】对请求 payload 做 JSON 格式检查，失败扣 SAN
+    let payload_str = payload.to_string();
+    if let Err(e) = crate::validator::json::check_not_empty(&payload_str) {
+        warn!(gate = "gateway", error = %e, "请求 payload 为空");
+        SanManager::deduct(&mut san, &e, &cfg.san_overrides);
+    }
 
     // 【新增逻辑】：拦截并覆盖模型名称
     // 强制把别人传过来的模型名称，替换成我们 config.toml 里配置的模型（例如 "openai/gpt-oss-120b"）
@@ -84,8 +96,14 @@ pub async fn proxy_handler(
         }
     }
 
+    // 记录本次请求的 SAN 状态
+    if san.is_corrupted() {
+        warn!(san = san.current_san, max = san.max_san, "网关请求 SAN 归零，环境已污染");
+    }
+
     info!("响应获取完毕，正在原样返回给请求方...");
 
     // 原样打包返回给外部的 Agent
     (status, Json(json_resp)).into_response()
 }
+

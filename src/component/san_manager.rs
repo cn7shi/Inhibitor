@@ -8,6 +8,7 @@
 
 use std::collections::HashMap;
 use crate::entity::san::{SanSchema, Pollutant};
+use tracing::warn;
 
 pub struct SanManager;
 
@@ -32,9 +33,13 @@ impl SanManager {
 
         schema.current_san = (schema.current_san - penalty).max(0);
 
-        println!(
-            "⚠️ [SAN] 错误: {}, 扣除: {}, 剩余: {}/{}",
-            error.error_key(), penalty, schema.current_san, schema.max_san
+        warn!(
+            component = "san",
+            error_key = error.error_key(),
+            penalty = penalty,
+            remaining = schema.current_san,
+            max = schema.max_san,
+            "SAN 扣减"
         );
 
         penalty
