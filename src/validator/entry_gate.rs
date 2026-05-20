@@ -24,5 +24,7 @@ pub fn run(permit: &Permit) -> Result<(), Vec<EntryGateError>> {
     }
 
     if errors.is_empty() { Ok(()) } else { Err(errors) }
+
+    //这里暂时有个问题，如果都空，那格式必然就是错的了。
 }
 
