@@ -58,7 +58,7 @@ pub async fn start_server(tx: broadcast::Sender<String>) {
     let app = Router::new()
         .route("/api/logs", get(sse_handler))
         .route("/api/config", get(get_config_handler).post(update_config_handler))
-        .route("/proxy/v1/chat/completions", post(crate::gateway::proxy_handler))
+        .route("/proxy/v1/chat/completions", post(crate::proxy::proxy_handler))
         .layer(CorsLayer::permissive())
         .with_state(tx);
 
