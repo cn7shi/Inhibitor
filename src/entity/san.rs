@@ -7,6 +7,19 @@
 //   - 原始错误（JsonError 等）：声明固有权重（weight）
 //   - 聚合错误（EntryGateError 等）：委托内部错误的 weight × 场景乘数
 
+/// SAN 扣减后发出的信号
+///
+/// 调用方必须处理此信号（#[must_use]），
+/// 编译器会对忽略返回值的代码发出警告。
+#[must_use]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SanSignal {
+    /// SAN 仍有余量，继续执行
+    Alive,
+    /// SAN 刚刚归零（本次扣减导致），应立即触发阻塞
+    Corrupted,
+}
+
 #[derive(Debug, Clone)]
 pub struct SanSchema {
     /// 初始设定的最大SAN值（容忍度）
@@ -29,9 +42,11 @@ impl SanSchema {
         self.current_san <= 0
     }
 
-    /// 扣减 SAN 值（使用预计算的扣减量）。
-    /// 由 pipeline 在收集完错误后统一调用。
-    pub fn apply_penalty(&mut self, penalty: i32, error_key: &str) {
+    /// 扣减 SAN 值并发出信号。
+    ///
+    /// 返回 `SanSignal::Corrupted` 表示本次扣减导致 SAN 归零，
+    /// 调用方应将此信号传递给 Blocklist 进行最终裁决。
+    pub fn apply_penalty(&mut self, penalty: i32, error_key: &str) -> SanSignal {
         self.current_san = (self.current_san - penalty).max(0);
         tracing::warn!(
             component = "san",
@@ -41,6 +56,12 @@ impl SanSchema {
             max = self.max_san,
             "SAN 扣减"
         );
+
+        if self.is_corrupted() {
+            SanSignal::Corrupted
+        } else {
+            SanSignal::Alive
+        }
     }
 }
 

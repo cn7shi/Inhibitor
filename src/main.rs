@@ -10,6 +10,7 @@ mod errors;
 mod telemetry;
 mod proxy;
 mod pipeline;
+mod blocklist;
 
 #[tokio::main]
 async fn main() {

@@ -3,12 +3,18 @@ use crate::gate::entry_gate::EntryGate;
 use crate::gate::exit_gate::ExitGate;
 use crate::component::notify::Notify;
 use crate::entity::permit::Permit;
-use crate::entity::san::{Pollutant, SanSchema};
+use crate::entity::san::{Pollutant, SanSchema, SanSignal};
+use crate::blocklist::Blocklist;
 use crate::config::Config;
 use tracing::{info, warn, error};
 
-/// 通用 Gate 校验：重试 + SAN 扣减 + 失败处理
-/// 返回 true = 校验通过，false = 已触发 Blocked
+/// 通用 Gate 校验：重试 + SAN 扣减
+///
+/// 职责瘦身：只管"重试 + 扣分"，不再做阻塞决策。
+/// 阻塞判定统一由 Blocklist::enforce() 在 run_once() 中执行。
+///
+/// 返回 true = 校验通过，false = 重试耗尽或 SAN 归零
+/// 目前还存在解析带来的性能损耗，后续考虑优化
 async fn run_gate<E: Pollutant + std::fmt::Debug>(
     permit: &mut Permit,
     config: &Config,
@@ -37,27 +43,20 @@ async fn run_gate<E: Pollutant + std::fmt::Debug>(
                 for e in &errors {
                     let penalty = config.san_overrides.get(e.error_key()).copied()
                         .unwrap_or_else(|| e.weight());
-                    san.apply_penalty(penalty, e.error_key());
-                }
-                if san.is_corrupted() {
-                    error!(component = gate_name, "SAN 归零，立即终止重试");
-                    break;
+
+                    // SAN 发出信号：归零则立即终止重试
+                    if san.apply_penalty(penalty, e.error_key()) == SanSignal::Corrupted {
+                        error!(component = gate_name, "SAN 归零信号触发，立即终止重试");
+                        permit.san = san; // 放回
+                        return false;
+                    }
                 }
             }
         }
     }
 
-    // 走到这里 = 重试耗尽 或 SAN 归零
+    // 重试耗尽
     permit.san = san; // 放回
-    permit.block_with_log(gate_name);
-    if permit.san.is_corrupted() {
-        warn!(san = permit.san.current_san, "SAN 值归零，环境已被严重污染");
-    }
-    Notify::send(
-        "任务挂起 (Blocked)",
-        &format!("{} Gate 校验失败，ID: {}，SAN: {}/{}",
-            gate_name, permit.permit_id, permit.san.current_san, permit.san.max_san),
-    ).await;
     false
 }
 
@@ -78,19 +77,27 @@ pub async fn run_once(mut payload: serde_json::Value) -> Result<serde_json::Valu
 
     // ──── 2. Exit Gate（出门校验）：准备离开 agent，去调用外部工具 ────
     if !run_gate(&mut permit, &config, "Exit", |p| ExitGate::check_out(p)).await {
-        return Err(format!("Exit Gate 拦截，permit_id: {}", permit.permit_id));
+        Blocklist::enforce(&mut permit, &config).await
+            .map_err(|signal| format!("Exit Gate 拦截: {}", signal))?;
+        return Err(format!("Exit Gate 重试耗尽，permit_id: {}", permit.permit_id));
     }
 
     // ──── 3. Execute（执行）：转发上游 LLM ────
     let json_resp = execute_llm(&config, &mut payload).await?;
     permit.payload = json_resp.to_string();
 
-    // ──── 4. Entry Gate（进门校验）：LLM 返回内容安全检查 ────
+    // ──── 4. Blocklist（阻塞名单审查）：LLM 返回后立即扫描危险内容 ────
+    Blocklist::enforce(&mut permit, &config).await
+        .map_err(|signal| format!("阻塞名单拦截: {}", signal))?;
+
+    // ──── 5. Entry Gate（进门校验）：LLM 返回格式/结构安全检查 ────
     if !run_gate(&mut permit, &config, "Entry", |p| EntryGate::check_in(p)).await {
-        return Err(format!("Entry Gate 拦截，permit_id: {}", permit.permit_id));
+        Blocklist::enforce(&mut permit, &config).await
+            .map_err(|signal| format!("Entry Gate 拦截: {}", signal))?;
+        return Err(format!("Entry Gate 重试耗尽，permit_id: {}", permit.permit_id));
     }
 
-    // ──── 5. Finish（完成）：标记生命周期结束 ────
+    // ──── 6. Finish（完成）：标记生命周期结束 ────
     permit.finish_with_log();
     Notify::send("任务完成 (Done)", &format!(
         "任务完成，ID: {}，最终SAN: {}/{}",
@@ -159,4 +166,3 @@ async fn execute_llm(
 
     Ok(json_resp)
 }
-

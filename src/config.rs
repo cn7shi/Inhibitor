@@ -24,6 +24,12 @@ pub struct Config {
     /// 运维发现某个扣分值不合理时，加一行即可立刻生效（热更新），无需重新编译。
     #[serde(default)]
     pub san_overrides: HashMap<String, i32>,
+
+    /// 能力黑名单 — 危险模式列表（大小写不敏感的字符串匹配）。
+    /// LLM 返回内容（content / tool_calls）中若包含这些模式，立即触发 Blocked。
+    /// 运维可热更新，无需重编译。
+    #[serde(default)]
+    pub capability_blacklist: Vec<String>,
 }
 
 impl Config {

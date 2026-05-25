@@ -5,3 +5,4 @@ pub mod exit_gate;   // 聚合：ExitGate 所需的全部校验
 pub mod json;
 pub mod permit;
 pub mod status;
+pub mod capability;  // 能力黑名单扫描
